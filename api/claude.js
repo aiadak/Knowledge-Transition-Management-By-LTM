@@ -1,7 +1,8 @@
-// /api/claude.js — server-side proxy to the Anthropic Messages API.
+// /api/claude.js — streaming server-side proxy to the Anthropic Messages API.
 // The API key is read from the ANTHROPIC_API_KEY environment variable and is
-// never sent to the browser. The front end POSTs { model, max_tokens, system,
-// messages } here; this forwards it to Anthropic and returns the raw response.
+// never sent to the browser. We request a streamed response from Anthropic and
+// pipe the SSE bytes straight to the client, so the connection is never idle —
+// this avoids the gateway 504 that a slow, buffered (non-streamed) call hits.
 //
 // No npm dependencies: uses the global fetch built into Vercel's Node runtime.
 
@@ -21,7 +22,7 @@ module.exports = async (req, res) => {
   body = body || {};
 
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -33,13 +34,40 @@ module.exports = async (req, res) => {
         max_tokens: body.max_tokens,
         system: body.system,
         messages: body.messages,
+        stream: true, // stream so the connection stays active
       }),
     });
-    const text = await r.text();
-    res.status(r.status);
-    res.setHeader("content-type", "application/json");
-    res.send(text); // pass Anthropic's JSON (or error) straight through
+
+    if (!upstream.ok || !upstream.body) {
+      const t = await upstream.text();
+      res.status(upstream.status || 502);
+      res.setHeader("content-type", "application/json");
+      res.send(t || JSON.stringify({ error: "upstream error " + upstream.status }));
+      return;
+    }
+
+    res.status(200);
+    res.setHeader("content-type", "text/event-stream; charset=utf-8");
+    res.setHeader("cache-control", "no-cache, no-transform");
+    res.setHeader("connection", "keep-alive");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+    const reader = upstream.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(Buffer.from(value));
+      if (typeof res.flush === "function") res.flush();
+    }
+    res.end();
   } catch (err) {
-    res.status(200).json({ error: "Proxy failed: " + (err && err.message ? err.message : String(err)) });
+    const msg = "Proxy failed: " + (err && err.message ? err.message : String(err));
+    if (!res.headersSent) {
+      res.status(200);
+      res.setHeader("content-type", "application/json");
+      res.send(JSON.stringify({ error: msg }));
+    } else {
+      try { res.end(); } catch (e) {}
+    }
   }
 };
