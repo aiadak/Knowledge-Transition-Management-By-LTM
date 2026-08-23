@@ -122,6 +122,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
   <div class="sb-item sb-agent" data-agent="fabric"><span class="sb-num">◈</span> Knowledge Fabric</div>
   <div class="sb-item sb-agent" data-agent="economics"><span class="sb-num">$</span> Token Economics</div>
   <div class="sb-item sb-agent" data-agent="governance"><span class="sb-num">⚙</span> Agent Governance</div>
+  <div class="sb-item sb-agent" data-agent="access"><span class="sb-num">🔑</span> API Key Governance</div>
   <div style="padding:14px 18px; margin-top:8px; border-top:1px solid rgba(255,255,255,.08)">
     <span class="pill" style="background:#16a34a;color:#fff">● Live · Anthropic API</span>
   </div>
@@ -257,7 +258,8 @@ const AGENTS = [
   { id:"transitionOptimizer", pillar:6, pillarName:"Platform", build:"MOCK", autonomy:"AUTO", displayName:"Transition Optimizer", tagline:"Reads the whole estate before steady state — ticket-mix, MTTR tail, blast radius and where automation pays. Nudges the team into readiness." },
   { id:"fabric",           pillar:6, pillarName:"Platform",     build:"MOCK", autonomy:"AUTO", displayName:"Knowledge Fabric", tagline:"Memory-as-a-Service — semantic, procedural, episodic and long-term context every agent draws on, growing with each resolved incident." },
   { id:"economics",        pillar:6, pillarName:"Platform",     build:"REAL", autonomy:"AUTO", displayName:"Token Economics", tagline:"Live token spend, model routing (Haiku ↔ Sonnet) and the cost saved by sending each task to the right model." },
-  { id:"governance",       pillar:6, pillarName:"Platform",     build:"MOCK", autonomy:"HITL", displayName:"Agent Governance", tagline:"Connectors, controls and observability — enable/disable tools, add skills, and audit every agent action." }
+  { id:"governance",       pillar:6, pillarName:"Platform",     build:"MOCK", autonomy:"HITL", displayName:"Agent Governance", tagline:"Connectors, controls and observability — enable/disable tools, add skills, and audit every agent action." },
+  { id:"access",           pillar:6, pillarName:"Platform",     build:"REAL", autonomy:"HITL", displayName:"API Key Governance", tagline:"Mint JWT proxy keys per person, approve new devices, revoke, and meter usage — your real key never leaves the server." }
 ];
 
 const PILLARS = [
@@ -303,6 +305,9 @@ const store = {
     { name:"Change Risk Scorer", tools:["ServiceNow","CyberArk"] },
     { name:"Blast-Radius Mapper", tools:["Big Panda","CMDB"] },
   ],
+  // API-key governance (server-enforced when the backend is configured, else an
+  // in-browser demo). `keys` mirrors the server; `mode` is server|browser.
+  access: { mode:null, configured:false, kv:false, token:null, keys:[], loggedIn:false, lastKey:null, msg:"" },
   // Rendered-result cache, keyed by agent id. Lets a run-once agent show its
   // last output on click without firing another Claude call. Cleared whenever
   // the corpus changes (see invalidatePipeline).
@@ -1444,7 +1449,7 @@ function awaitingBox(msg) {
 }
 // Reviewer is stateful/interactive (live HITL) — it always recomputes from the
 // current approval trail and is never served from cache.
-const NO_CACHE_AGENTS = new Set(["reviewer"]);
+const NO_CACHE_AGENTS = new Set(["reviewer", "access"]);
 /** Render a typed knowledge graph as a ring-laid node-link SVG (nodes coloured
  *  by type, asserted edges solid, inferred edges dashed). */
 function graphSvg(d) {
@@ -2200,6 +2205,7 @@ async function renderSceneBody(a) {
         coach: 'Calendar · Fabric', copilot: 'ServiceNow · Big Panda · Luna · CloudWatch',
         automation: 'CloudWatch · Big Panda', transitionOptimizer: 'ServiceNow · Big Panda · CMDB · CloudWatch',
         fabric: 'Bedrock Knowledge Bases · S3', economics: 'Bedrock AgentCore metering',
+        access: 'Proxy gateway · JWT · Device FP · KV',
       };
       const agentObs = AGENTS.filter(a => a.id !== 'governance').map(a => {
         const c = (window.KTEcon?.calls || []).filter(x => x.endpoint && x.endpoint.includes(a.id.replace('interviewPlanner', 'interview-planner').replace('transitionOptimizer', 'transition').replace('extractor', 'extract')));
@@ -2245,6 +2251,98 @@ async function renderSceneBody(a) {
           <tbody>${agentObs.map(o => `<tr class="border-t"><td class="py-1 pr-2">${esc(o.name)}</td><td><span class="pill ${o.build === 'REAL' ? 'pill-real' : 'pill-mock'}">${o.build}</span></td><td>${o.ran ? '<span class="pill pill-live">ran</span>' : '<span class="text-gray-300">idle</span>'}</td><td class="text-gray-500">${esc(o.tools)}</td><td class="text-right text-gray-600">${o.tokens ? o.tokens.toLocaleString() : '—'}</td></tr>`).join('')}</tbody></table>
         </div>
         <div class="text-xs text-gray-500 mt-2">Toggles, skills and observability are live in-session; connector auth is illustrative. Runtime & integration points reflect the customer's Amazon Bedrock AgentCore platform.</div>`;
+    }
+
+    /* ---------- Platform · API Key Governance ---------- */
+    case 'access': {
+      const A = store.access;
+      if (A.mode === null) {
+        try { const c = await accessApi('config'); A.configured = !!c.configured; A.kv = !!c.kv; A.mode = c.configured ? 'server' : 'browser'; }
+        catch (e) { A.mode = 'browser'; A.configured = false; A.kv = false; }
+      }
+      const server = A.mode === 'server';
+      const modeBadge = server
+        ? `<span class="pill pill-real">SERVER-ENFORCED</span> ${A.kv ? '<span class="pill pill-real">KV ON</span>' : '<span class="pill pill-draft">KV OFF</span>'}`
+        : `<span class="pill pill-hitl">DEMO · IN-BROWSER</span>`;
+      const intro = `<p class="text-sm mb-3">Your real Anthropic key stays on the server — never in a browser. Here you mint <b>JWT proxy keys</b> per person; every <b>new device is blocked until you allow it</b>, and usage is metered per key.${server ? '' : ' <b>Demo mode</b> — the backend isn’t configured, so approvals &amp; usage run in-browser for the walkthrough.'}</p>`;
+
+      if (!A.loggedIn) {
+        return `${intro}
+          <div class="bg-white border rounded-lg p-4" style="max-width:460px">
+            <div class="flex items-center justify-between mb-2"><div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">Owner sign-in</div><span>${modeBadge}</span></div>
+            <p class="text-[11px] text-gray-500 mb-2">${server ? 'Enter the ADMIN_PASSWORD set in your Vercel environment.' : 'Any password works in demo mode — sign-in is enforced server-side once configured.'}</p>
+            <div class="flex gap-2 no-toggle">
+              <input type="password" class="acc-pw no-toggle flex-1 border rounded px-2 py-1.5 text-sm" placeholder="Owner password" />
+              <button class="acc-login no-toggle px-4 py-1.5 bg-slate-900 text-white rounded text-sm">Sign in</button>
+            </div>
+            ${A.msg ? `<div class="text-xs mt-2 ${/wrong|fail|invalid|not /i.test(A.msg) ? 'text-red-600' : 'text-green-700'}">${esc(A.msg)}</div>` : ''}
+          </div>
+          ${accSetupNote(server, A.kv)}`;
+      }
+
+      const keys = A.keys || [];
+      const pend = [];
+      keys.forEach(k => Object.entries(k.devices || {}).forEach(([fp, d]) => { if (d.status === 'pending') pend.push({ jti: k.jti, person: k.person, fp, d }); }));
+      const fmtTok = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n || 0);
+      const devSummary = k => { const ds = Object.values(k.devices || {}); const ap = ds.filter(d => d.status === 'approved').length, pe = ds.filter(d => d.status === 'pending').length, de = ds.filter(d => d.status === 'denied').length; return `${ap} allowed${pe ? ` · ${pe} pending` : ''}${de ? ` · ${de} denied` : ''}` || '—'; };
+
+      const lastKey = A.lastKey ? `<div class="mb-3 p-3 rounded-lg" style="background:var(--accent-tint);border:1px solid var(--accent)">
+        <div class="text-xs font-semibold mb-1">New proxy key for <b>${esc(A.lastKey.person)}</b> · expires in ${A.lastKey.days} days — copy it now, it won’t be shown again</div>
+        <div class="flex gap-2 items-center no-toggle">
+          <input class="no-toggle flex-1 border rounded px-2 py-1 text-[11px] font-mono bg-white" readonly value="${esc(A.lastKey.token)}" onclick="this.select()" />
+          <button class="acc-copy no-toggle px-3 py-1 bg-slate-900 text-white rounded text-xs" data-token="${esc(A.lastKey.token)}">Copy</button>
+          <button class="acc-test no-toggle px-3 py-1 border rounded text-xs" data-jti="${esc(A.lastKey.jti)}" title="Simulate this teammate's device calling the API">Test as teammate</button>
+        </div>
+        <div class="text-[10px] text-gray-500 mt-1">The teammate injects this as their <code>Authorization: Bearer</code> key (or an env var). The gateway checks it — the real key is never shared.</div>
+      </div>` : '';
+
+      const pendHtml = pend.length ? `<div class="bg-white border rounded-lg p-3 mb-3" style="border-left:4px solid var(--lm-yellow)">
+        <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">Access requests — new devices awaiting your approval (${pend.length})</div>
+        ${pend.map(p => `<div class="flex items-center justify-between gap-2 py-1.5 border-b last:border-0 text-xs">
+          <div><b>${esc(p.person)}</b> <span class="text-gray-400 font-mono">${esc(p.fp)}</span><div class="text-[10px] text-gray-400">${esc(p.d.ua || 'unknown device')}</div></div>
+          <div class="flex gap-1 no-toggle">
+            <button class="acc-approve no-toggle px-2.5 py-1 bg-green-600 text-white rounded" data-jti="${esc(p.jti)}" data-fp="${esc(p.fp)}">Allow</button>
+            <button class="acc-deny no-toggle px-2.5 py-1 border border-red-300 text-red-700 rounded" data-jti="${esc(p.jti)}" data-fp="${esc(p.fp)}">Deny</button>
+          </div>
+        </div>`).join('')}
+      </div>` : `<div class="text-xs text-gray-500 mb-3">No pending device requests.</div>`;
+
+      const totCalls = keys.reduce((a, k) => a + (k.usage?.calls || 0), 0);
+      const totTok = keys.reduce((a, k) => a + (k.usage?.inTok || 0) + (k.usage?.outTok || 0), 0);
+
+      const keysTable = `<div class="bg-white border rounded-lg p-3 overflow-x-auto">
+        <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">Issued keys &amp; usage</div>
+        ${keys.length ? `<table class="w-full text-xs"><thead><tr class="text-gray-500 text-[11px]"><th class="text-left pb-2">Person</th><th class="text-left pb-2">Status</th><th class="text-left pb-2">Devices</th><th class="text-right pb-2">Calls</th><th class="text-right pb-2">Tokens</th><th class="pb-2"></th></tr></thead>
+        <tbody>${keys.map(k => `<tr class="border-t">
+          <td class="py-1.5 pr-2"><b>${esc(k.person)}</b><div class="text-[10px] text-gray-400 font-mono">${esc(k.jti)}</div></td>
+          <td>${k.revoked ? '<span class="pill pill-draft">revoked</span>' : '<span class="pill pill-real">active</span>'}</td>
+          <td class="text-gray-600">${esc(devSummary(k))}</td>
+          <td class="text-right">${k.usage?.calls || 0}</td>
+          <td class="text-right">${fmtTok((k.usage?.inTok || 0) + (k.usage?.outTok || 0))}</td>
+          <td class="text-right no-toggle"><button class="acc-revoke no-toggle px-2 py-0.5 border rounded text-[11px]" data-jti="${esc(k.jti)}" data-rev="${k.revoked ? '0' : '1'}">${k.revoked ? 'Restore' : 'Revoke'}</button></td>
+        </tr>`).join('')}</tbody></table>` : '<div class="text-xs text-gray-400">No keys yet — mint one above.</div>'}
+      </div>`;
+
+      return `${intro}
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <span>${modeBadge}</span>
+          <div class="flex items-center gap-3 text-xs text-gray-500"><span>${totCalls} calls · ${fmtTok(totTok)} tokens metered</span><button class="acc-logout no-toggle px-2.5 py-1 border rounded">Sign out</button></div>
+        </div>
+        <div class="bg-white border rounded-lg p-3 mb-3">
+          <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">Mint a proxy key</div>
+          <div class="flex flex-wrap gap-2 items-center no-toggle">
+            <input class="acc-person no-toggle border rounded px-2 py-1.5 text-sm" placeholder="Person / team name" style="min-width:180px" />
+            <span class="text-xs text-gray-500">expires in</span>
+            <input class="acc-days no-toggle border rounded px-2 py-1.5 text-sm" type="number" value="30" min="1" max="365" style="width:70px" />
+            <span class="text-xs text-gray-500">days</span>
+            <button class="acc-mint no-toggle px-4 py-1.5 bg-teal-700 text-white rounded text-sm">＋ Generate key</button>
+          </div>
+        </div>
+        ${lastKey}
+        ${A.msg ? `<div class="text-xs mb-3 p-2 rounded ${/fail|invalid|denied|error/i.test(A.msg) ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}">${esc(A.msg)}</div>` : ''}
+        ${pendHtml}
+        ${keysTable}
+        ${accSetupNote(server, A.kv)}`;
     }
 
     default: return '<div class="text-sm text-gray-500">No content.</div>';
@@ -2543,6 +2641,106 @@ $('#kt-chips').addEventListener('click', e => { const c = e.target.closest('.chi
     if (q) { if (input) input.value = ''; ktChatSend(q); }
   };
 })();
+
+/* ------------------------------------------------------------------ *
+ * API Key Governance — real proxy-key gateway (server) with an
+ * in-browser demo fallback. Talks to /api/admin; the real key never
+ * leaves the server (/api/claude gateway). See SETUP-access.md.
+ * ------------------------------------------------------------------ */
+async function accessApi(action, payload) {
+  const A = store.access;
+  const headers = { 'content-type': 'application/json' };
+  if (A.token) headers['authorization'] = 'Bearer ' + A.token;
+  const r = await fetch('/api/admin', { method: 'POST', headers, body: JSON.stringify(Object.assign({ action }, payload || {})) });
+  const ct = r.headers.get('content-type') || '';
+  if (ct.indexOf('application/json') < 0) throw new Error('no-admin-endpoint');
+  return r.json();
+}
+async function accessRefresh() {
+  const A = store.access;
+  if (A.mode === 'server' && A.token) {
+    try { const j = await accessApi('list', {}); if (j && j.keys) A.keys = j.keys; if (j && j.kv === false) A.kv = false; } catch (e) {}
+  }
+}
+async function accessLogin(pw) {
+  const A = store.access;
+  if (A.mode === 'server') {
+    try { const j = await accessApi('login', { password: pw }); if (j && j.ok) { A.token = j.token; A.loggedIn = true; A.kv = !!j.kv; A.msg = ''; await accessRefresh(); } else { A.msg = (j && j.error) || 'Login failed'; } }
+    catch (e) { A.mode = 'browser'; A.loggedIn = true; A.msg = ''; }
+  } else { A.loggedIn = true; A.msg = ''; }
+}
+function browserMintKey(person, days) {
+  const jti = Math.random().toString(16).slice(2, 11);
+  const now = Math.floor(Date.now() / 1000);
+  const payload = btoa(JSON.stringify({ aud: 'proxy', sub: person, jti, iat: now, exp: now + days * 86400 })).replace(/=+$/g, '');
+  const token = 'demokey.' + payload + '.' + Math.random().toString(16).slice(2, 10);
+  return { jti, person, createdAt: Date.now(), expEpoch: now + days * 86400, revoked: false, devices: {}, usage: { calls: 0, inTok: 0, outTok: 0 }, token };
+}
+async function accessMint(person, days) {
+  const A = store.access; A.tokens = A.tokens || {};
+  if (A.mode === 'server') {
+    const j = await accessApi('mint', { person, days });
+    if (j && j.ok) { A.lastKey = { person: j.person, jti: j.jti, token: j.token, days: j.days }; A.tokens[j.jti] = j.token; await accessRefresh(); }
+    else A.msg = (j && j.error) || 'Mint failed';
+  } else {
+    const rec = browserMintKey(person, days); A.keys.push(rec); A.tokens[rec.jti] = rec.token;
+    A.lastKey = { person, jti: rec.jti, token: rec.token, days };
+  }
+}
+async function accessDecide(jti, fp, ok) {
+  const A = store.access;
+  if (A.mode === 'server') { const j = await accessApi(ok ? 'approve' : 'deny', { jti, fp }); if (j && j.keys) A.keys = j.keys; }
+  else { const k = A.keys.find(x => x.jti === jti); if (k && k.devices[fp]) { k.devices[fp].status = ok ? 'approved' : 'denied'; } }
+  A.msg = ok ? 'Device approved — that teammate can now use the service.' : 'Device denied.';
+}
+async function accessRevoke(jti, rev) {
+  const A = store.access;
+  if (A.mode === 'server') { const j = await accessApi(rev ? 'revoke' : 'unrevoke', { jti }); if (j && j.keys) A.keys = j.keys; }
+  else { const k = A.keys.find(x => x.jti === jti); if (k) k.revoked = rev; }
+}
+async function accessTest(jti) {
+  const A = store.access; const token = (A.tokens || {})[jti]; const fp = 'fp_teammate_' + jti.slice(0, 6);
+  if (A.mode === 'server' && token) {
+    try {
+      const r = await fetch('/api/claude', { method: 'POST', headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + token, 'x-device-fp': fp }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 16, system: 'Reply with the single word: pong.', messages: [{ role: 'user', content: 'ping' }] }) });
+      const ct = r.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') >= 0) { const j = await r.json(); A.msg = (j.message || j.error || 'response') + ' — device ' + fp; }
+      else { A.msg = 'Teammate call succeeded (device approved) — usage metered on the key.'; }
+    } catch (e) { A.msg = 'Test failed: ' + e.message; }
+    await accessRefresh();
+  } else {
+    const k = A.keys.find(x => x.jti === jti);
+    if (k) { const d = k.devices[fp];
+      if (!d) { k.devices[fp] = { status: 'pending', firstSeen: Date.now(), ua: 'Teammate · Chrome (simulated)' }; A.msg = `New device from ${k.person} is pending your approval.`; }
+      else if (d.status === 'approved') { k.usage.calls++; k.usage.inTok += 900; k.usage.outTok += 40; d.lastSeen = Date.now(); A.msg = `${k.person}'s approved device made a metered call.`; }
+      else { A.msg = `That device is ${d.status}.`; }
+    }
+  }
+}
+function accSetupNote(server, kv) {
+  const need = [];
+  if (!server) need.push('<code>ADMIN_PASSWORD</code> and <code>PROXY_JWT_SECRET</code> in Vercel → Settings → Environment Variables');
+  if (server && !kv) need.push('attach a <b>Vercel KV</b> (Upstash Redis) store so approvals &amp; usage persist');
+  const done = server && kv;
+  return `<details class="mt-3 text-xs no-toggle"><summary class="cursor-pointer text-gray-500">${done ? '✓ Server-enforced governance is fully configured' : 'How to turn on server-enforced governance'}</summary>
+    <div class="mt-2 text-gray-600 leading-relaxed">
+      ${done ? 'This deployment verifies JWT proxy keys, gates new devices, and meters usage on the server — the real Anthropic key is never exposed.' :
+      `To enforce access on the server (not just in this browser): ${need.map(n => '<div>• ' + n + '</div>').join('')}
+      <div class="mt-1">The gateway (<code>/api/claude</code>) then verifies each proxy key + device before forwarding, and <code>/api/admin</code> stores approvals and usage. Full steps are in <code>SETUP-access.md</code>.</div>`}
+    </div></details>`;
+}
+
+document.addEventListener('click', async e => {
+  const t = e.target;
+  if (t.closest('.acc-login')) { e.stopPropagation(); const pw = document.querySelector('#scene-access .acc-pw')?.value || ''; await accessLogin(pw); activate('access', true); return; }
+  if (t.closest('.acc-logout')) { e.stopPropagation(); const A = store.access; A.loggedIn = false; A.token = null; A.lastKey = null; A.msg = ''; activate('access', true); return; }
+  if (t.closest('.acc-mint')) { e.stopPropagation(); const p = (document.querySelector('#scene-access .acc-person')?.value || '').trim() || 'Unnamed'; const d = parseInt(document.querySelector('#scene-access .acc-days')?.value, 10) || 30; await accessMint(p, d); activate('access', true); return; }
+  const dec = t.closest('.acc-approve, .acc-deny'); if (dec) { e.stopPropagation(); await accessDecide(dec.dataset.jti, dec.dataset.fp, dec.classList.contains('acc-approve')); activate('access', true); return; }
+  const rev = t.closest('.acc-revoke'); if (rev) { e.stopPropagation(); await accessRevoke(rev.dataset.jti, rev.dataset.rev === '1'); activate('access', true); return; }
+  const test = t.closest('.acc-test'); if (test) { e.stopPropagation(); await accessTest(test.dataset.jti); activate('access', true); return; }
+  const cp = t.closest('.acc-copy'); if (cp) { e.stopPropagation(); try { await navigator.clipboard.writeText(cp.dataset.token); cp.textContent = 'Copied ✓'; setTimeout(() => cp.textContent = 'Copy', 1200); } catch (err) {} return; }
+});
+document.addEventListener('keydown', e => { if (e.target.classList?.contains('acc-pw') && e.key === 'Enter') { document.querySelector('#scene-access .acc-login')?.click(); } });
 
 /* ------------------------------------------------------------------ *
  * Boot
