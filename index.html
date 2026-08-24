@@ -67,6 +67,16 @@
   @media (max-width: 1023px) { #kt-sidebar { display: none; } body { padding-left: 0; } }
   /* KT Copilot chat */
   #kt-chat-btn { position: fixed; right: 20px; bottom: 20px; z-index: 50; background: var(--lm-navy); color: #fff; border: 2px solid var(--lm-yellow); border-radius: 999px; padding: 10px 16px; font-weight: 600; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.25); cursor: pointer; }
+  #kt-conn-btn { position: fixed; left: 20px; bottom: 20px; z-index: 50; background: #fff; color: var(--lm-navy); border: 2px solid var(--lm-teal); border-radius: 999px; padding: 10px 16px; font-weight: 600; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.2); cursor: pointer; }
+  #kt-conn-btn.pending { background: var(--lm-yellow); color: var(--lm-navy); border-color: var(--lm-yellow); }
+  #kt-conn-btn.connected { background: #16a34a; color: #fff; border-color: #16a34a; }
+  #kt-conn-btn.blocked { background: #dc2626; color: #fff; border-color: #dc2626; }
+  #kt-conn-panel { position: fixed; left: 20px; bottom: 74px; width: 306px; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.28); z-index: 50; display: none; overflow: hidden; }
+  #kt-conn-panel.open { display: block; }
+  #kt-conn-panel .hd { background: var(--lm-navy); color: #fff; padding: 12px 14px; font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+  #kt-conn-panel .bd { padding: 14px; font-size: 13px; color: #334155; line-height: 1.5; }
+  #kt-conn-panel input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; font-size: 13px; margin: 6px 0; }
+  #kt-conn-panel button.primary { background: var(--lm-teal); color: #fff; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; width: 100%; }
   #kt-chat { position: fixed; right: 20px; bottom: 74px; z-index: 50; width: 372px; max-width: calc(100vw - 40px); height: 520px; max-height: calc(100vh - 120px); background: #fff; border-radius: 14px; box-shadow: 0 20px 50px rgba(15,23,42,.3); display: none; flex-direction: column; overflow: hidden; border: 1px solid #e5e7eb; }
   #kt-chat.open { display: flex; }
   #kt-chat .hd { background: var(--lm-navy); color: #fff; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; }
@@ -210,6 +220,13 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
   Knowledge Transition Workbench · Planning &rarr; KT &rarr; Shadow &rarr; Reverse Shadow &rarr; Compounding Intelligence
 </footer>
 
+<!-- Self-service "Connect to Anthropic" — a teammate requests access; Aakash approves. -->
+<button id="kt-conn-btn">🔌 Connect to Anthropic</button>
+<div id="kt-conn-panel">
+  <div class="hd"><span>Connect to Anthropic</span><span id="kt-conn-close" style="cursor:pointer">✕</span></div>
+  <div class="bd" id="kt-conn-body"></div>
+</div>
+
 <!-- KT Copilot chat (connected to the live Anthropic API, grounded in the agents' output) -->
 <button id="kt-chat-btn">💬 KT Copilot</button>
 <div id="kt-chat">
@@ -308,6 +325,8 @@ const store = {
   // API-key governance (server-enforced when the backend is configured, else an
   // in-browser demo). `keys` mirrors the server; `mode` is server|browser.
   access: { mode:null, configured:false, kv:false, token:null, keys:[], loggedIn:false, lastKey:null, msg:"" },
+  // Self-service "Connect to Anthropic" — this browser's own connection state.
+  conn: { status:'none', token:null, jti:null, fp:null, name:'' },
   // Rendered-result cache, keyed by agent id. Lets a run-once agent show its
   // last output on click without firing another Claude call. Cleared whenever
   // the corpus changes (see invalidatePipeline).
@@ -591,8 +610,13 @@ async function callClaude({ model=MODEL_DEEP, system, user, maxTokens=4000 }){
   // The Anthropic key is held server-side (ANTHROPIC_API_KEY env var) and used
   // by the /api/claude proxy — never exposed to the browser. The proxy streams
   // the model's reply back as SSE, which we accumulate here into the full text.
+  // If this browser is a connected teammate, attach their proxy key so the
+  // gateway meters usage to them (the owner runs untokened).
+  const _headers = { 'content-type':'application/json' };
+  const _conn = (typeof window !== 'undefined') ? window.__ktConn : null;
+  if (_conn && _conn.token && _conn.status === 'connected') { _headers['authorization'] = 'Bearer ' + _conn.token; _headers['x-device-fp'] = _conn.fp || ''; }
   const r = await fetch('/api/claude', {
-    method:'POST', headers:{ 'content-type':'application/json' },
+    method:'POST', headers:_headers,
     body: JSON.stringify({ model, max_tokens:maxTokens, system, messages:[{ role:'user', content:user }], stream:true })
   });
   const ct = (r.headers.get('content-type') || '');
@@ -2142,6 +2166,8 @@ async function renderSceneBody(a) {
 
     /* ---------- Platform · Token Economics + Model Router ---------- */
     case 'economics': {
+      // If Aakash is signed into API Key Governance, refresh per-user usage.
+      if (store.access.loggedIn && store.access.mode === 'server' && store.access.token) { try { await accessRefresh(); } catch (e) {} }
       const calls = (window.KTEcon && window.KTEcon.calls) || [];
       const totCost = calls.reduce((a, c) => a + c.cost, 0);
       const totIn = calls.reduce((a, c) => a + c.inTok, 0);
@@ -2188,6 +2214,20 @@ async function renderSceneBody(a) {
           <table class="w-full text-xs"><thead><tr class="text-gray-500 text-[11px]"><th class="text-left pb-2">Agent</th><th class="text-left pb-2">Model</th><th class="text-left pb-2">Routing rationale</th></tr></thead>
           <tbody>${router.map(r => `<tr class="border-t"><td class="py-1.5 pr-2"><b>${esc(r.agent)}</b></td><td class="pr-2"><span class="pill ${r.tier === 'fast' ? 'pill-auto' : 'pill-live'}">${esc(r.model)}</span></td><td class="text-gray-600">${esc(r.why)}</td></tr>`).join('')}</tbody></table>
         </div>
+        ${(() => {
+          const users = (store.access.keys || []).filter(k => k.usage && (k.usage.calls || k.usage.inTok || k.usage.outTok));
+          users.sort((a, b) => ((b.usage.inTok + b.usage.outTok) - (a.usage.inTok + a.usage.outTok)));
+          const uCost = u => (u.inTok / 1e6) * 2 + (u.outTok / 1e6) * 10;  // blended in/out estimate
+          const inner = users.length
+            ? `<table class="w-full text-xs"><thead><tr class="text-gray-500 text-[11px]"><th class="text-left pb-2">User</th><th class="text-right pb-2">Calls</th><th class="text-right pb-2">Tokens (in / out)</th><th class="text-right pb-2">≈ Cost</th></tr></thead>
+               <tbody>${users.map(k => `<tr class="border-t"><td class="py-1.5 pr-2"><b>${esc(k.person)}</b>${k.revoked ? ' <span class="pill pill-draft">revoked</span>' : ''}</td><td class="text-right">${k.usage.calls || 0}</td><td class="text-right text-gray-600">${(k.usage.inTok || 0).toLocaleString()} / ${(k.usage.outTok || 0).toLocaleString()}</td><td class="text-right">${money(uCost(k.usage))}</td></tr>`).join('')}</tbody></table>
+               <div class="text-[11px] text-gray-400 mt-1">Per-approved-user usage, metered by the gateway. ≈ Cost is a blended-rate estimate.</div>`
+            : (store.access.loggedIn
+              ? '<div class="text-xs text-gray-500">No per-user usage yet — approved teammates’ calls will appear here.</div>'
+              : '<div class="text-xs text-gray-500">Sign in to <b>API Key Governance</b> (as Aakash) to see usage broken down by approved user.</div>');
+          return `<div class="bg-white border rounded-lg p-3 mt-3">
+            <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">Usage by user — who has used how much</div>${inner}</div>`;
+        })()}
         <div class="text-xs text-gray-500 mt-2">Live meter reads real per-call token usage from the API. Priced at current published list rates — Haiku 4.5 $1/$5, Sonnet $3/$15 per Mtok (in/out). The baseline re-prices the exact same tokens as if every call ran on Sonnet.</div>`;
     }
 
@@ -2269,8 +2309,8 @@ async function renderSceneBody(a) {
       if (!A.loggedIn) {
         return `${intro}
           <div class="bg-white border rounded-lg p-4" style="max-width:460px">
-            <div class="flex items-center justify-between mb-2"><div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">Owner sign-in</div><span>${modeBadge}</span></div>
-            <p class="text-[11px] text-gray-500 mb-2">${server ? 'Enter the ADMIN_PASSWORD set in your Vercel environment.' : 'Any password works in demo mode — sign-in is enforced server-side once configured.'}</p>
+            <div class="flex items-center justify-between mb-2"><div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">Aakash · owner sign-in</div><span>${modeBadge}</span></div>
+            <p class="text-[11px] text-gray-500 mb-2">${server ? 'Enter your ADMIN_PASSWORD (set in Vercel) to approve access requests and see per-user usage.' : 'Any password works in demo mode — sign-in is enforced server-side once configured.'}</p>
             <div class="flex gap-2 no-toggle">
               <input type="password" class="acc-pw no-toggle flex-1 border rounded px-2 py-1.5 text-sm" placeholder="Owner password" />
               <button class="acc-login no-toggle px-4 py-1.5 bg-slate-900 text-white rounded text-sm">Sign in</button>
@@ -2563,7 +2603,9 @@ async function ktChatSend(q) {
     ? `You are the KT Copilot generating a concise KNOWLEDGE-TRANSITION STATUS REPORT for leadership (IT production support, USRM value stream). Use ONLY the live programme state below. Structure it exactly as: a one-line headline; then labelled sections "Progress:", "This week:", "Risks:", "Automation upside:". Under "This week:" and "Risks:" use short hyphen bullets. ${noAsterisk} If a needed agent has not run, note it as a gap.\n\nLIVE PROGRAMME STATE:\n${buildKtContext()}`
     : `You are the KT Copilot for a knowledge-transition programme (IT production support, USRM value stream). Answer the user concisely and specifically using ONLY the live programme state below. Prioritise next-best-actions, the KT schedule, and KT completion status when relevant. Keep it short (max ~6 lines); use a labelled line or a couple of hyphen bullets where it helps. ${noAsterisk} If a needed agent has not run, say which to run first.\n\nLIVE PROGRAMME STATE:\n${buildKtContext()}`;
   try {
-    const r = await fetch('/api/claude', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: isReport ? 900 : 600, system: sys, messages: [{ role: 'user', content: q }], stream: true }) });
+    const _h = { 'content-type': 'application/json' };
+    if (window.__ktConn && window.__ktConn.token) { _h['authorization'] = 'Bearer ' + window.__ktConn.token; _h['x-device-fp'] = window.__ktConn.fp || ''; }
+    const r = await fetch('/api/claude', { method: 'POST', headers: _h, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: isReport ? 900 : 600, system: sys, messages: [{ role: 'user', content: q }], stream: true }) });
     const ct = r.headers.get('content-type') || '';
     if (ct.indexOf('application/json') >= 0) { const j = await r.json(); const t = (j && j.error) ? '' : (j.content || []).map(c => c.text || '').join(''); bot.innerHTML = (j && j.error) ? ('⚠ ' + esc(j.error.message || j.error)) : fmtChat(t); if (window.__ktSpeakOn && t) ktSpeak(t); msgs.scrollTop = msgs.scrollHeight; return; }
     const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '', txt = '';
@@ -2741,6 +2783,106 @@ document.addEventListener('click', async e => {
   const cp = t.closest('.acc-copy'); if (cp) { e.stopPropagation(); try { await navigator.clipboard.writeText(cp.dataset.token); cp.textContent = 'Copied ✓'; setTimeout(() => cp.textContent = 'Copy', 1200); } catch (err) {} return; }
 });
 document.addEventListener('keydown', e => { if (e.target.classList?.contains('acc-pw') && e.key === 'Enter') { document.querySelector('#scene-access .acc-login')?.click(); } });
+
+/* ------------------------------------------------------------------ *
+ * Connect to Anthropic — self-service access for teammates. They click
+ * Connect → a request lands in Aakash's console → he approves/rejects →
+ * this widget flips to Connected, and from then on this browser's calls
+ * carry the teammate's key so usage is metered to them.
+ * ------------------------------------------------------------------ */
+function ktClientFp() {
+  try { const n = navigator, s = screen; const raw = [n.userAgent, n.platform, n.language, (n.languages || []).join(','), s.width + 'x' + s.height, s.colorDepth, new Date().getTimezoneOffset(), n.hardwareConcurrency || ''].join('|'); let h = 0; for (let i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) >>> 0; return 'fp_' + h.toString(16); }
+  catch (e) { return 'fp_' + Math.random().toString(16).slice(2, 10); }
+}
+function connSave() { try { localStorage.setItem('kt_conn', JSON.stringify(store.conn)); } catch (e) {} }
+function connLoad() { try { const s = localStorage.getItem('kt_conn'); if (s) store.conn = Object.assign(store.conn, JSON.parse(s)); } catch (e) {} }
+function connApply() { window.__ktConn = (store.conn.status === 'connected') ? { token: store.conn.token, fp: store.conn.fp, status: 'connected' } : null; }
+function connBtn() {
+  const b = document.getElementById('kt-conn-btn'); if (!b) return;
+  b.classList.remove('pending', 'connected', 'blocked');
+  const s = store.conn.status;
+  if (s === 'connected') { b.classList.add('connected'); b.textContent = '✓ Connected' + (store.conn.name ? ' · ' + store.conn.name : ''); }
+  else if (s === 'pending') { b.classList.add('pending'); b.textContent = '⏳ Awaiting approval'; }
+  else if (s === 'denied' || s === 'revoked') { b.classList.add('blocked'); b.textContent = '⛔ Access ' + s; }
+  else b.textContent = '🔌 Connect to Anthropic';
+}
+function connRender() {
+  connBtn();
+  const el = document.getElementById('kt-conn-body'); if (!el) return;
+  const s = store.conn.status;
+  if (s === 'connected') {
+    const u = store.conn.usage || {}; const tok = (u.inTok || 0) + (u.outTok || 0);
+    el.innerHTML = `<div style="color:#16a34a;font-weight:600;margin-bottom:4px">✓ Connected as ${esc(store.conn.name || 'you')}</div>
+      <div style="font-size:12px;color:#64748b">Your calls use your approved key — Aakash can see your usage${tok ? ` (so far: ${u.calls || 0} calls · ${tok.toLocaleString()} tokens)` : ''}.</div>
+      <button class="conn-reset primary" style="background:#64748b;margin-top:10px">Disconnect</button>`;
+  } else if (s === 'pending') {
+    el.innerHTML = `<div style="margin-bottom:6px"><span class="spin"></span> Waiting for <b>Aakash</b> to approve your device…</div>
+      <div style="font-size:12px;color:#64748b">You’ll connect automatically once approved. You can leave this open.</div>
+      <button class="conn-reset primary" style="background:#64748b;margin-top:10px">Cancel request</button>`;
+  } else if (s === 'denied' || s === 'revoked') {
+    el.innerHTML = `<div style="color:#dc2626;font-weight:600;margin-bottom:4px">Access ${s}</div>
+      <div style="font-size:12px;color:#64748b">Ask Aakash, or request again.</div>
+      <button class="conn-reset primary" style="margin-top:10px">Request again</button>`;
+  } else {
+    el.innerHTML = `<div style="font-size:12px;color:#64748b;margin-bottom:2px">Request access to the Anthropic-powered agents. The real key is never shared — Aakash approves your device.</div>
+      <input class="conn-name" placeholder="Your name" value="${esc(store.conn.name || '')}" />
+      <button class="conn-request primary">Connect</button>
+      ${store.conn._msg ? `<div style="font-size:11px;color:#dc2626;margin-top:6px">${esc(store.conn._msg)}</div>` : ''}`;
+  }
+}
+async function connRequest(name) {
+  store.conn.name = name; store.conn.fp = store.conn.fp || ktClientFp(); store.conn._msg = '';
+  let server = false;
+  try { const c = await accessApi('config'); server = !!(c.configured && c.kv); store.access.configured = !!c.configured; store.access.kv = !!c.kv; } catch (e) { server = false; }
+  if (server) {
+    try {
+      const r = await fetch('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'request', name, fp: store.conn.fp }) });
+      const j = await r.json();
+      if (j && j.ok) { store.conn.status = 'pending'; store.conn.token = j.token; store.conn.jti = j.jti; store.conn._demo = false; }
+      else { store.conn._msg = (j && j.error) || 'Request failed'; }
+    } catch (e) { store.conn._msg = 'Request failed'; }
+  } else {
+    // demo mode: create a pending self-service key locally so Aakash's console shows it
+    const rec = browserMintKey(name, 30); rec.selfService = true; rec.devices[store.conn.fp] = { status: 'pending', firstSeen: Date.now(), ua: 'This browser (demo)' };
+    store.access.keys.push(rec); store.access.tokens = store.access.tokens || {}; store.access.tokens[rec.jti] = rec.token;
+    store.conn.status = 'pending'; store.conn.jti = rec.jti; store.conn.token = rec.token; store.conn._demo = true;
+    if (state.active === 'access') activate('access', true);
+  }
+  connSave(); connApply(); connRender(); connPollStart();
+}
+function connApplyStatus(st, usage) {
+  const prev = store.conn.status;
+  if (st === 'approved') store.conn.status = 'connected';
+  else if (st === 'pending') store.conn.status = 'pending';
+  else if (st === 'denied') store.conn.status = 'denied';
+  else if (st === 'revoked') store.conn.status = 'revoked';
+  if (usage) store.conn.usage = usage;
+  if (store.conn.status !== prev) { connSave(); connApply(); connRender(); }
+  else if (usage) connRender();
+}
+async function connCheck() {
+  if (store.conn.status !== 'pending' && store.conn.status !== 'connected') return;
+  if (store.conn._demo) {
+    const k = (store.access.keys || []).find(x => x.jti === store.conn.jti); const d = k && k.devices[store.conn.fp];
+    connApplyStatus(k ? (k.revoked ? 'revoked' : (d ? d.status : 'pending')) : 'pending', k ? k.usage : null); return;
+  }
+  try {
+    const r = await fetch('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'mystatus', jti: store.conn.jti, fp: store.conn.fp }) });
+    const j = await r.json(); connApplyStatus((j && j.status) || 'pending', j && j.usage);
+  } catch (e) {}
+}
+let _connTimer = null;
+function connPollStart() { if (_connTimer) clearInterval(_connTimer); _connTimer = setInterval(connCheck, 4000); }
+function connReset() { store.conn = { status: 'none', token: null, jti: null, fp: store.conn.fp, name: store.conn.name, _demo: false, usage: null }; connSave(); connApply(); connRender(); if (_connTimer) clearInterval(_connTimer); }
+
+document.getElementById('kt-conn-btn')?.addEventListener('click', () => document.getElementById('kt-conn-panel')?.classList.toggle('open'));
+document.getElementById('kt-conn-close')?.addEventListener('click', () => document.getElementById('kt-conn-panel')?.classList.remove('open'));
+document.addEventListener('click', e => {
+  if (e.target.closest('.conn-request')) { const nm = (document.querySelector('#kt-conn-body .conn-name')?.value || '').trim(); if (!nm) { document.querySelector('#kt-conn-body .conn-name')?.focus(); return; } connRequest(nm); return; }
+  if (e.target.closest('.conn-reset')) { connReset(); return; }
+});
+connLoad(); connApply(); connRender();
+if (store.conn.status === 'pending' || store.conn.status === 'connected') connPollStart();
 
 /* ------------------------------------------------------------------ *
  * Boot
