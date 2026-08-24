@@ -34,6 +34,35 @@ module.exports = async (req, res) => {
     return json(res, 200, { configured: false, kv, error: "Server governance not configured. Set ADMIN_PASSWORD and PROXY_JWT_SECRET (and add Vercel KV) to enable server-enforced mode." });
   }
 
+  // ---- public: a teammate requests access (no admin token) ----
+  // Creates a pending proxy key bound to their device. It does nothing until
+  // the owner approves the device in the console. Returns the token so the
+  // requester can poll and, once approved, use it.
+  if (action === "request") {
+    if (!kv) return json(res, 200, { kv: false, error: "Access store not attached yet." });
+    const person = String(body.name || "").trim().slice(0, 60) || "Guest";
+    const fp = String(body.fp || "").slice(0, 64);
+    if (!fp) return json(res, 400, { error: "missing device fingerprint" });
+    const days = 30;
+    const jti = newJti();
+    const token = G.signJWT({ aud: "proxy", sub: person, jti }, SECRET, days * 86400);
+    const rec = { jti, person, createdAt: Date.now(), expEpoch: Math.floor(Date.now() / 1000) + days * 86400, revoked: false, selfService: true,
+      devices: { [fp]: { status: "pending", firstSeen: Date.now(), lastSeen: Date.now(), ua: (req.headers["user-agent"] || "").slice(0, 120) } },
+      usage: { calls: 0, inTok: 0, outTok: 0 } };
+    await G.putKey(rec);
+    return json(res, 200, { ok: true, jti, token, status: "pending", person });
+  }
+
+  // ---- public: a requester polls their approval status ----
+  if (action === "mystatus") {
+    if (!kv) return json(res, 200, { kv: false, status: "unknown" });
+    const rec = await G.getKey(String(body.jti || ""));
+    if (!rec) return json(res, 200, { status: "unknown" });
+    const dev = rec.devices[String(body.fp || "")];
+    const status = rec.revoked ? "revoked" : (dev ? dev.status : "pending");
+    return json(res, 200, { status, person: rec.person, usage: rec.usage });
+  }
+
   // ---- login: password -> admin session token ----
   if (action === "login") {
     const ok = typeof body.password === "string" &&
