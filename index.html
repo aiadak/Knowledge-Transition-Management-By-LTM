@@ -3,23 +3,28 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>USRM Knowledge Transition Workbench</title>
+<title>LTM Knowledge Transition Workbench</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --ink: #1a1446;            /* Liberty Mutual midnight navy */
-    --paper: #f4f5f7;
-    --accent: #007a8a;         /* Liberty teal (CTAs / links / accents) */
-    --accent-ink: #005f6b;
-    --accent-tint: rgba(0,122,138,.12);
-    --lm-yellow: #ffcd00;      /* Liberty Mutual yellow */
-    --lm-navy: #1a1446;
-    --lm-teal: #007a8a;
+    /* LTM brand — black surfaces, coral accent, light body */
+    --ink: #16181d;            /* near-black text / headings */
+    --paper: #f5f6f8;
+    --accent: #e9573d;         /* LTM coral (CTAs / links / accents) */
+    --accent-ink: #c7492f;
+    --accent-tint: rgba(233,87,61,.12);
+    --lm-yellow: #e9573d;      /* accent borders → coral */
+    --lm-navy: #101216;        /* header / sidebar black */
+    --lm-teal: #e9573d;        /* former teal → coral */
   }
-  html, body { font-family: 'Calibri', 'Segoe UI', system-ui, sans-serif; background: var(--paper); color: var(--ink); }
-  .font-serif { font-family: 'Calibri', 'Segoe UI', system-ui, sans-serif; font-weight: 700; letter-spacing: -0.01em; }
+  html, body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--paper); color: var(--ink); }
+  .font-serif { font-family: 'Poppins', 'Inter', system-ui, sans-serif; font-weight: 700; letter-spacing: -0.01em; }
   .header-bar { background: var(--lm-navy); color: #fff; border-bottom: 3px solid var(--lm-yellow); }
+  /* Map leftover Tailwind teal utilities to the LTM coral accent */
+  .bg-teal-700, .hover\:bg-teal-700:hover { background-color: var(--accent-ink) !important; }
+  .text-teal-700 { color: var(--accent) !important; }
+  .border-teal-600, .border-teal-700 { border-color: var(--accent) !important; }
   .accent { color: var(--accent); }
   .bg-accent { background: var(--accent); }
   .border-accent { border-color: var(--accent); }
@@ -58,11 +63,11 @@
   table.grid th, table.grid td { border-bottom: 1px solid #e5e7eb; padding: .35rem .5rem; text-align: left; vertical-align: top; }
   /* Sidebar */
   #kt-sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 230px; background: var(--lm-navy); color: #cbd5e1; overflow-y: auto; z-index: 45; border-right: 3px solid var(--lm-yellow); }
-  #kt-sidebar .sb-sec { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f97bd; padding: 16px 18px 6px; }
+  #kt-sidebar .sb-sec { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #9aa0aa; padding: 16px 18px 6px; }
   #kt-sidebar .sb-item { display: flex; align-items: center; gap: 9px; padding: 9px 18px; font-size: 13px; color: #e2e8f0; cursor: pointer; border-left: 3px solid transparent; }
   #kt-sidebar .sb-item:hover { background: rgba(255,255,255,.06); }
-  #kt-sidebar .sb-item.active { background: rgba(255,210,0,.12); border-left-color: var(--lm-yellow); color: #fff; font-weight: 600; }
-  #kt-sidebar .sb-num { width: 18px; height: 18px; border-radius: 5px; background: rgba(255,205,0,.16); color: var(--lm-yellow); font-weight:700; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+  #kt-sidebar .sb-item.active { background: rgba(233,87,61,.14); border-left-color: var(--lm-yellow); color: #fff; font-weight: 600; }
+  #kt-sidebar .sb-num { width: 18px; height: 18px; border-radius: 5px; background: rgba(233,87,61,.16); color: var(--lm-yellow); font-weight:700; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
   @media (min-width: 1024px) { body { padding-left: 230px; } }
   @media (max-width: 1023px) { #kt-sidebar { display: none; } body { padding-left: 0; } }
   /* KT Copilot chat */
@@ -112,11 +117,8 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
 
 <aside id="kt-sidebar">
   <div style="padding:16px 18px; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,.08)">
-    <svg width="30" height="30" viewBox="0 0 40 40" fill="none">
-      <path d="M20 7 L8 14 M20 7 L32 14 M8 14 L8 26 M32 14 L32 26 M8 26 L20 33 M32 26 L20 33 M8 14 L32 26 M32 14 L8 26 M20 7 L20 33" stroke="#7f97bd" stroke-width="1.1" stroke-linecap="round"/>
-      <circle cx="20" cy="7" r="3.6" fill="#ffcd00"/><circle cx="8" cy="14" r="2.7" fill="#fff"/><circle cx="32" cy="14" r="2.7" fill="#fff"/><circle cx="8" cy="26" r="2.7" fill="#fff"/><circle cx="32" cy="26" r="2.7" fill="#fff"/><circle cx="20" cy="33" r="3.2" fill="#ffcd00"/>
-    </svg>
-    <div style="line-height:1.1"><div style="font-weight:700; font-size:14px; color:#fff">KT Workbench</div><div style="font-size:9px; letter-spacing:.12em; color:#7f97bd">KNOWLEDGE TRANSITION</div></div>
+    <span style="font-family:'Poppins',sans-serif;font-weight:700;font-size:22px;letter-spacing:.5px;color:#e9573d;line-height:1">LTM</span>
+    <div style="line-height:1.15"><div style="font-weight:600; font-size:13px; color:#fff">KT Workbench</div><div style="font-size:8.5px; letter-spacing:.1em; color:#9aa0aa">A LARSEN &amp; TOUBRO GROUP CO.</div></div>
   </div>
   <div class="sb-sec">Workspace</div>
   <div class="sb-item sb-nav active" data-nav="dashboard">Dashboard</div>
@@ -141,17 +143,13 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
 <header class="header-bar">
   <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
     <div class="flex items-center gap-3 cursor-pointer" id="header-home">
-      <svg class="mark" viewBox="0 0 40 40" fill="none" aria-label="Knowledge graph">
-        <path d="M20 7 L8 14 M20 7 L32 14 M8 14 L8 26 M32 14 L32 26 M8 26 L20 33 M32 26 L20 33 M8 14 L32 26 M32 14 L8 26 M20 7 L20 33" stroke="#7f97bd" stroke-width="1.1" stroke-linecap="round"/>
-        <circle cx="20" cy="7" r="3.6" fill="#ffcd00"/>
-        <circle cx="8" cy="14" r="2.7" fill="#fff"/>
-        <circle cx="32" cy="14" r="2.7" fill="#fff"/>
-        <circle cx="8" cy="26" r="2.7" fill="#fff"/>
-        <circle cx="32" cy="26" r="2.7" fill="#fff"/>
-        <circle cx="20" cy="33" r="3.2" fill="#ffcd00"/>
-      </svg>
+      <div class="flex items-center gap-3">
+        <span style="font-family:'Poppins',sans-serif;font-weight:700;font-size:30px;letter-spacing:.5px;color:#e9573d;line-height:1">LTM</span>
+        <span style="display:inline-block;width:1px;height:34px;background:rgba(255,255,255,.28)"></span>
+      </div>
       <div>
-        <div class="font-serif text-2xl leading-tight">Knowledge Transition Workbench</div>
+        <div class="font-serif text-xl leading-tight">Knowledge Transition Workbench</div>
+        <div style="font-size:10px;color:#9aa0aa;letter-spacing:.04em">A Larsen &amp; Toubro Group Company</div>
       </div>
     </div>
     <nav class="flex items-center gap-1">
@@ -231,7 +229,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
 <button id="kt-chat-btn">💬 KT Copilot</button>
 <div id="kt-chat">
   <div class="hd">
-    <div><b>KT Copilot</b><div style="font-size:10px;color:#7f97bd">next actions · schedule · completion</div></div>
+    <div><b>KT Copilot</b><div style="font-size:10px;color:#9aa0aa">next actions · schedule · completion</div></div>
     <div style="display:flex;align-items:center;gap:12px">
       <span id="kt-voice-toggle" title="Read replies aloud (voice output)" style="cursor:pointer;font-size:15px;opacity:.45;padding:2px">🔊</span>
       <span id="kt-chat-close" style="cursor:pointer;font-size:16px">✕</span>
@@ -1505,7 +1503,7 @@ function graphSvg(d) {
     const label = conf != null
       ? `<g><rect x="${(lx - 12).toFixed(1)}" y="${(ly - 7).toFixed(1)}" width="24" height="13" rx="6.5" fill="#fff" opacity="0.9"/><text x="${lx.toFixed(1)}" y="${(ly + 3).toFixed(1)}" text-anchor="middle" font-size="9" fill="#475569">${conf.toFixed(2)}</text></g>`
       : '';
-    return `<path d="M${a.x.toFixed(1)},${a.y.toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}" fill="none" stroke="${solid ? '#007a8a' : '#cbd5e1'}" stroke-width="${w.toFixed(2)}"${solid ? '' : ' stroke-dasharray="4 3"'} opacity="${op.toFixed(2)}"/>${label}`;
+    return `<path d="M${a.x.toFixed(1)},${a.y.toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}" fill="none" stroke="${solid ? '#e9573d' : '#cbd5e1'}" stroke-width="${w.toFixed(2)}"${solid ? '' : ' stroke-dasharray="4 3"'} opacity="${op.toFixed(2)}"/>${label}`;
   }).join('');
   const nodeEls = nodes.map(n => {
     const p = pos[n.id], c = colorOf(n.type || 'Other');
@@ -1636,7 +1634,7 @@ async function renderSceneBody(a) {
       })) : baseFiles).map((f, i) => ({
         ...f, name: `KT_S${i + 1}_${slug(f.app)}_${slug(f.topic)}_${dts[i] || '2026-08-2' + (i + 2)}.txt`,
       }));
-      const fileIcon = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M14 3v4a1 1 0 0 0 1 1h4" stroke="#007a8a" stroke-width="1.4"/><path d="M5 3h9l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" stroke="#007a8a" stroke-width="1.4"/><path d="M8 13h8M8 16.5h6" stroke="#94a3b8" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+      const fileIcon = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M14 3v4a1 1 0 0 0 1 1h4" stroke="#e9573d" stroke-width="1.4"/><path d="M5 3h9l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" stroke="#e9573d" stroke-width="1.4"/><path d="M8 13h8M8 16.5h6" stroke="#94a3b8" stroke-width="1.2" stroke-linecap="round"/></svg>`;
       const totalMin = files.reduce((a, f) => a + (f.mins || 0), 0);
       return `<p class="text-sm mb-3">The KT Session Agent sits in on every live KT session with <b>${esc(smeName() || 'the outgoing SME')}</b>. It records the call, transcribes it in real time, and files the transcript straight into the shared knowledge repository — no manual note-taking, nothing lost. <b>${files.length}</b> sessions · <b>${totalMin} min</b> captured.</p>
         <div class="bg-gray-50 rounded-lg p-3 mb-3">
@@ -2008,7 +2006,7 @@ async function renderSceneBody(a) {
         const ps = d.portfolio_summary || {};
         const disp = k => ({ automate: 'pill-real', agent: 'pill-live', assist: 'pill-hitl', manual: 'pill-mock' }[k] || 'pill-mock');
         // sequential Liberty-blue ramp for score 1..5 (magnitude → one hue, light→dark)
-        const RAMP = ['#e6f3f4', '#bfe1e4', '#7fc4ca', '#2f9aa6', '#007a8a'];
+        const RAMP = ['#fdece7', '#f9c9bd', '#f2a08c', '#ec6f52', '#e9573d'];
         const cell = v => {
           const n = Math.max(1, Math.min(5, Math.round(Number(v) || 0)));
           const bg = RAMP[n - 1], fg = n >= 4 ? '#fff' : '#0f172a';
@@ -2133,8 +2131,8 @@ async function renderSceneBody(a) {
       const nEdges = g?.meta?.edges || 68;
       const nEpisodes = Math.max(174, store.tickets.length);
       const layers = [
-        { name: 'Semantic memory', icon: '◈', what: 'Entities & relationships — applications, changes, incidents, rules', stat: `${nNodes} nodes · ${nEdges} edges`, src: 'Knowledge Graph Generator', col: '#1a1446' },
-        { name: 'Procedural memory', icon: '▤', what: 'The living runbooks — SOPs, exception library, decision rules', stat: `${nSops} SOPs · ${nRules} rules`, src: 'KT Document Generator', col: '#007a8a' },
+        { name: 'Semantic memory', icon: '◈', what: 'Entities & relationships — applications, changes, incidents, rules', stat: `${nNodes} nodes · ${nEdges} edges`, src: 'Knowledge Graph Generator', col: '#16181d' },
+        { name: 'Procedural memory', icon: '▤', what: 'The living runbooks — SOPs, exception library, decision rules', stat: `${nSops} SOPs · ${nRules} rules`, src: 'KT Document Generator', col: '#e9573d' },
         { name: 'Episodic memory', icon: '◷', what: 'Resolved incidents with the fix path and what worked', stat: `${nEpisodes.toLocaleString()} episodes`, src: 'Ticket corpus + resolutions', col: '#0b5fa5' },
         { name: 'Long-term context (LTM)', icon: '∞', what: 'Context-as-a-service — grounded context served to every agent on demand', stat: `served to ${AGENTS.length} agents`, src: 'Fabric API', col: '#7a5cff' },
       ];
@@ -2255,7 +2253,7 @@ async function renderSceneBody(a) {
       return `<p class="text-sm mb-3">Governance is where you control and <b>observe</b> the agents — which tools they can reach, what skills exist, and a full audit of what ran. Nothing is a black box.</p>
         <div class="mb-3 p-3 rounded-lg" style="background:var(--lm-navy);color:#e2e8f0">
           <div class="flex items-center justify-between flex-wrap gap-2">
-            <div><div class="text-[11px] uppercase tracking-widest" style="color:#7f97bd">Agentic runtime</div><div class="font-semibold text-sm">Amazon Bedrock AgentCore</div></div>
+            <div><div class="text-[11px] uppercase tracking-widest" style="color:#9aa0aa">Agentic runtime</div><div class="font-semibold text-sm">Amazon Bedrock AgentCore</div></div>
             <div class="text-[11px]" style="color:#cbd5e1">Models: Claude Haiku 4.5 · Sonnet (via Bedrock) &nbsp;·&nbsp; Memory: Bedrock Knowledge Bases + Fabric &nbsp;·&nbsp; Observability: AWS CloudWatch</div>
           </div>
           <div class="text-[11px] mt-1" style="color:#9fb3d6">The KT agents run on the customer's existing AgentCore platform — this workbench sits on top and plugs into their tools, rather than replacing them.</div>
