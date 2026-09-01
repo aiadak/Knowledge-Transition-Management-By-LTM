@@ -174,7 +174,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
           <input type="file" class="wb-file" style="display:none" accept=".xlsx,.xlsm,.xls,.csv,.tsv,.json,.txt,.md" multiple />
           <div><button class="wb-browse bg-accent text-white px-4 py-2 rounded-md text-sm font-semibold">Choose files</button>
           <span class="ml-2">or drag them here</span></div>
-          <div class="text-xs text-gray-500 mt-2">Upload <b>USRM_KT_corpus.xlsx</b> — incidents · changes · KB · KT transcript · runbooks</div>
+          <div class="text-xs text-gray-500 mt-2">Upload your KT corpus (.xlsx) — incidents · changes · KB · KT transcript · runbooks</div>
         </div>
         <div id="file-list" class="mt-3 text-xs"></div>
       </div>
@@ -2598,8 +2598,8 @@ async function ktChatSend(q) {
   const isReport = /status report|report for|leadership|steering|weekly update|exec/i.test(q);
   const noAsterisk = 'Format as clean labelled lines and simple hyphen bullets only. Never use asterisks, bold markers, or markdown headings of any kind.';
   const sys = isReport
-    ? `You are the KT Copilot generating a concise KNOWLEDGE-TRANSITION STATUS REPORT for leadership (IT production support, USRM value stream). Use ONLY the live programme state below. Structure it exactly as: a one-line headline; then labelled sections "Progress:", "This week:", "Risks:", "Automation upside:". Under "This week:" and "Risks:" use short hyphen bullets. ${noAsterisk} If a needed agent has not run, note it as a gap.\n\nLIVE PROGRAMME STATE:\n${buildKtContext()}`
-    : `You are the KT Copilot for a knowledge-transition programme (IT production support, USRM value stream). Answer the user concisely and specifically using ONLY the live programme state below. Prioritise next-best-actions, the KT schedule, and KT completion status when relevant. Keep it short (max ~6 lines); use a labelled line or a couple of hyphen bullets where it helps. ${noAsterisk} If a needed agent has not run, say which to run first.\n\nLIVE PROGRAMME STATE:\n${buildKtContext()}`;
+    ? `You are the KT Copilot generating a concise KNOWLEDGE-TRANSITION STATUS REPORT for leadership (IT production support). Use ONLY the live programme state below. Structure it exactly as: a one-line headline; then labelled sections "Progress:", "This week:", "Risks:", "Automation upside:". Under "This week:" and "Risks:" use short hyphen bullets. ${noAsterisk} If a needed agent has not run, note it as a gap.\n\nLIVE PROGRAMME STATE:\n${buildKtContext()}`
+    : `You are the KT Copilot for a knowledge-transition programme (IT production support). Answer the user concisely and specifically using ONLY the live programme state below. Prioritise next-best-actions, the KT schedule, and KT completion status when relevant. Keep it short (max ~6 lines); use a labelled line or a couple of hyphen bullets where it helps. ${noAsterisk} If a needed agent has not run, say which to run first.\n\nLIVE PROGRAMME STATE:\n${buildKtContext()}`;
   try {
     const _h = { 'content-type': 'application/json' };
     if (window.__ktConn && window.__ktConn.token) { _h['authorization'] = 'Bearer ' + window.__ktConn.token; _h['x-device-fp'] = window.__ktConn.fp || ''; }
